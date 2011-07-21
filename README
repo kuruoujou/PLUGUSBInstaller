@@ -1,0 +1,9 @@
+So, uh, yeah. Let's go with a GPL license, which I'll upload in a bit.
+
+Basically, installer.py is the text-based installer, and display.py is my god-awful attempt at a gui for it. In fact, it doesn't even work yet.
+
+You'll need 'unetbootin' in order to use this, as this is basically just a front-end for it.
+
+So, to use it, just download the ubuntu and fedora ISOs (and change the ISO file names in installer.py if necessary) and run python installer.py. Then plug in a flash drive and it should be picked up automatically and begin asking you questions. I think the most it'll ask is 4 (but I don't remember), and then it'll run unetbootin and install your chosen ISO on the drive.
+
+Yeah, I know the code is god-awful. I have no idea what I was thinking when I wrote it. But at least it's mildly readable.
