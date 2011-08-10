@@ -6,10 +6,11 @@ MINSIZE = 2000000000
 UBUNTU = "ubuntu-11.04-desktop-amd64.iso"
 FEDORA = "Fedora-15-x86_64-Live-Desktop.iso"
 KDSETLED = 0x4B32
-SCR_LED = 0x01
-NUM_LED = 0x02
-CAP_LED = 0x04
-ALL_LED = SCR_LED | NUM_LED | CAP_LED
+UBU_LED = 0x01
+FED_LED = 0x02
+BCK_LED = 0x04
+ALL_LED = UBU_LED | FED_LED | BCK_LED
+NO_BCK = UBU_LED | FED_LED
 NO_LED = 0
 email = ""
 fileExists = 0
@@ -41,12 +42,28 @@ class InstallOnDevice:
 				print "Would you like Ubuntu 11.04 (64 bit) or Fedora Core 15 (64 bit), or would you like to backup your device?"
 				self.distro = getkey()
 				if (self.distro == "" or self.distro == "u" or self.distro == "U"):
-					self.Install(obj, "ubuntu")
-					break
+					fcntl.ioctl(console_fd, KDSETLED, NO_LED)
+					fcntl.ioctl(console_fd, KDSETLED, UBU_LED)
+					print "Ubuntu Selected. Press again to confirm, or any other key to cancel..."
+					self.check = getkey()
+					if (self.check == "u" or self.check == "U" or self.check == ""):
+						self.Install(obj, "ubuntu")
+						break
+					else:
+						break
 				elif (self.distro == "f" or self.distro == "F"):
-					self.Install(obj, "fedora")
-					break
-				elif (self.distro == "b" or self.distro == "B"):
+					fcntl.ioctl(console_fd, KDSETLED, NO_LED)
+					fcntl.ioctl(console_fd, KDSETLED, FED_LED)
+					print "Fedora Selected. Press again to confirm, or any other key to cancel..."
+					self.check = getkey()
+					if (self.check == "f" or self.check == "F"):
+						self.Install(obj, "fedora")
+						break
+					else:
+						break
+				elif (self.distro == "b" or self.distro == "B"):	
+					fcntl.ioctl(console_fd, KDSETLED, NO_LED)
+					fcntl.ioctl(console_fd, KDSETLED, BCK_LED)
 					runBackup = 1
 					runBck = self.Backup(runBackup, devFile, dev)
 					if not runBck:
@@ -56,14 +73,29 @@ class InstallOnDevice:
 				else:
 					print "That is not a valid option. Please try again."
 			if fileExists == 1 and runBackup == 1 and cancel == 0:
+				fcntl.ioctl(console_fd, KDSETLED, NO_BCK)
 				print "Would you like Ubuntu 11.04 (64 bit) or Fedora Core 15 (64 bit)?"
 				self.distro = getkey()
 				if (self.distro == "" or self.distro == "u" or self.distro == "U"):
-					self.Install(obj, "ubuntu")
-					break
+					fcntl.ioctl(console_fd, KDSETLED, NO_LED)
+					fcntl.ioctl(console_fd, KDSETLED, UBU_LED)
+					print "Ubuntu selected. Press again to confirm, or any other key to cancel..."
+					self.check = getkey()
+					if (self.check == "u" or self.check == "U"):
+						self.Install(obj, "ubuntu")
+						break
+					else:
+						break
 				elif (self.distro == "f" or self.distro == "F"):
-					self.Install(obj, "fedora")
-					break
+					fcntl.ioctl(console_fd, KDSETLED, NO_LED)
+					fcntl.ioctl(console_fd, KDSETLED, FED_LED)
+					print "Fedora selected. Press again to confirm, or any other key to cancel..."
+					self.check = getkey()
+					if (self.check == "f" or self.check == "F"):
+						self.Install(obj, "fedora")
+						break
+					else:
+						break
 				elif (self.distro == "c" or self.distro == "C"):
 					break
 				else:
@@ -71,6 +103,7 @@ class InstallOnDevice:
 
 		#insert backup email code here.
 		EjectDrive(dev)
+		fcntl.ioctl(console_fd, KDSETLED, NO_LED)
 		if backupFile != "":
 			if runBackup == 0:
 				print "Deleting unecessary backup file."
