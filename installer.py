@@ -1,32 +1,74 @@
 #!/usr/bin/env python
-import dbus
-import gobject
-import time
-import datetime
-import os
-import shutil
-import subprocess
+import dbus, termios, sys, os, gobject, time, datetime, shutil, subprocess, fcntl 
 
+TERMIOS = termios
 MINSIZE = 2000000000
 UBUNTU = "ubuntu-11.04-desktop-amd64.iso"
 FEDORA = "Fedora-15-x86_64-Live-Desktop.iso"
-runBackup = 0
-backupFile = ""
+KDSETLED = 0x4B32
+SCR_LED = 0x01
+NUM_LED = 0x02
+CAP_LED = 0x04
+ALL_LED = SCR_LED | NUM_LED | CAP_LED
+NO_LED = 0
 email = ""
+fileExists = 0
+backupFile = ""
+console_fd = os.open('/dev/console', os.O_NOCTTY)
+
+def getkey():
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        new = termios.tcgetattr(fd)
+        new[3] = new[3] & ~TERMIOS.ICANON & ~TERMIOS.ECHO
+        new[6][TERMIOS.VMIN] = 1
+        new[6][TERMIOS.VTIME] = 0
+        termios.tcsetattr(fd, TERMIOS.TCSANOW, new)
+        c = None
+        try:
+                c = os.read(fd, 1)
+        finally:
+                termios.tcsetattr(fd, TERMIOS.TCSAFLUSH, old)
+        return c
 
 class InstallOnDevice:
-	def __init__(self, obj, dev):
+	def __init__(self, obj, dev, devFile):
+		cancel = 0
+		runBackup = 0
 		while True:
-			self.distro = raw_input("Would you like Ubuntu 11.04 (64 bit) or Fedora Core 15 (64 bit)? (U/f): ")
-			if (self.distro == "" or self.distro == "u" or self.distro == "U"):
-				self.distro = "ubuntu"
-				break
-			elif (self.distro == "f" or self.distro == "F"):
-				self.distro = "fedora"
-				break
-			else:
-				print "That is not a valid option. Please try again."
-		self.Install(obj, self.distro)
+			if fileExists == 1 and runBackup == 0 and cancel == 0:
+				fcntl.ioctl(console_fd, KDSETLED, ALL_LED)
+				print "Would you like Ubuntu 11.04 (64 bit) or Fedora Core 15 (64 bit), or would you like to backup your device?"
+				self.distro = getkey()
+				if (self.distro == "" or self.distro == "u" or self.distro == "U"):
+					self.Install(obj, "ubuntu")
+					break
+				elif (self.distro == "f" or self.distro == "F"):
+					self.Install(obj, "fedora")
+					break
+				elif (self.distro == "b" or self.distro == "B"):
+					runBackup = 1
+					runBck = self.Backup(runBackup, devFile, dev)
+					if not runBck:
+						cancel = 1
+				elif (self.distro == "c" or self.distro == "C"):
+					break
+				else:
+					print "That is not a valid option. Please try again."
+			if fileExists == 1 and runBackup == 1 and cancel == 0:
+				print "Would you like Ubuntu 11.04 (64 bit) or Fedora Core 15 (64 bit)?"
+				self.distro = getkey()
+				if (self.distro == "" or self.distro == "u" or self.distro == "U"):
+					self.Install(obj, "ubuntu")
+					break
+				elif (self.distro == "f" or self.distro == "F"):
+					self.Install(obj, "fedora")
+					break
+				elif (self.distro == "c" or self.distro == "C"):
+					break
+				else:
+					print "That is not a valid option. Please try again."
+
 		#insert backup email code here.
 		EjectDrive(dev)
 		if backupFile != "":
@@ -43,50 +85,9 @@ class InstallOnDevice:
 		subprocess.call(['unetbootin', 'rootcheck=no', 'method=diskimage', 'isofile='+os.getcwd()+'/'+self.distFile, 'installtype=USB', 'targetdrive='+obj, 'autoinstall=yes'])
 		print "Installation complete."
 
-
-class CheckIfEmpty:
-	def __init__(self, obj, dev):
-		counter = 0
-		while True:
-			time.sleep(1)
-			mtab = open('/etc/mtab', 'r')
-			for line in mtab:
-				if line.split(' ')[0] == obj:
-					devFile = line.split(' ')[1]
-			if not devFile:
-				counter = counter + 1
-			elif counter == 10:
-				print "Could not get device's mounted directory"
-				EjectDrive(dev)
-				break
-			else:
-				break
-
-		if os.listdir(devFile):
-			global runBackup
-			while True:
-				overwrite = raw_input("Device is not empty. Do you want to overwrite, backup, or cancel? (o/b/C): ")
-				if (overwrite == "" or overwrite == "c" or overwrite == "C"):
-					EjectDrive(dev)
-					self.cont = False
-					break
-				elif (overwrite == "b" or overwrite == "B"):
-					runBackup = 1
-					self.cont = self.Backup(devFile, dev)
-					break
-				elif (overwrite == "o" or overwrite == "O"):
-					#self.cont = self.Backup(devFile, dev)
-					self.cont = True
-					break
-				else:
-					print "Invalid input, please try again."
-			if self.cont == True:
-				InstallOnDevice(obj, dev)
-		else:
-			InstallOnDevice(obj, dev)
-
-	def Backup(self, devFile, dev):
-		global backupFile, email
+	def Backup(self, runBackup, devFile, dev):
+		global email
+		global backupFile
 		if runBackup == 1:
 			email = raw_input("Enter your email address (your backup will be emailed to you, or a link to it will be provided): ")
 			backupFile = email + str(datetime.datetime.now())
@@ -116,7 +117,35 @@ class CheckIfEmpty:
 				else:
 					print "Continuing anyway. All data will be permenantly lost in case of error."
 					return True
-		
+
+
+
+class CheckIfEmpty:
+	def __init__(self, obj, dev):
+		counter = 0
+		while True:
+			time.sleep(1)
+			mtab = open('/etc/mtab', 'r')
+			for line in mtab:
+				if line.split(' ')[0] == obj:
+					devFile = line.split(' ')[1]
+			if not devFile:
+				counter = counter + 1
+			elif counter == 10:
+				print "Could not get device's mounted directory"
+				EjectDrive(dev)
+				break
+			else:
+				break
+
+		if os.listdir(devFile):
+				global fileExists
+				fileExists = 1
+				InstallOnDevice(obj, dev, devFile)
+		else:
+			InstallOnDevice(obj, dev, devFile)
+
+			
 
 class EjectDrive:
 	def __init__(self, dev):
